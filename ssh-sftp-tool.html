@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShellForge — SSH & SFTP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    /* ========================================
+       Design Tokens
+       ======================================== */
+    :root {
+      --frame: #141820;
+      --panel: #1A1F2B;
+      --surface: #222836;
+      --elevated: #2A3142;
+      --hover: #333C50;
+      --active: #3D4759;
+      --border: #282F3E;
+      --divider: #1E2433;
+      --text-primary: #E2E6ED;
+      --text-secondary: #8892A4;
+      --text-muted: #5A6478;
+      --accent: #E8A84C;
+      --accent-hover: #F0B860;
+      --accent-dim: rgba(232, 168, 76, 0.12);
+      --success: #4CAF7D;
+      --error: #CF5C4F;
+      --info: #5B8FD9;
+      --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --titlebar-h: 38px;
+      --statusbar-h: 26px;
+      --panel-header-h: 36px;
+    }
+
+    /* ========================================
+       Reset
+       ======================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; min-height: 100vh; overflow: hidden; }
+    body {
+      font-family: var(--font-ui);
+      font-size: 13px;
+      color: var(--text-primary);
+      background: var(--frame);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    button {
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    input { font-family: inherit; font-size: inherit; }
+    table { border-collapse: collapse; width: 100%; }
+
+    /* ========================================
+       App Shell
+       ======================================== */
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+      position: relative;
+    }
+
+    /* ========================================
+       Title Bar
+       ======================================== */
+    .titlebar {
+      height: var(--titlebar-h);
+      background: var(--frame);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .app-logo { color: var(--accent); font-size: 14px; }
+    .app-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: -0.3px;
+      color: var(--text-secondary);
+    }
+    .titlebar-center {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      position: relative;
+    }
+    .connection-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 14px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-primary);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .connection-btn:hover {
+      background: var(--elevated);
+      border-color: var(--hover);
+    }
+    .connection-btn:hover .fa-chevron-down { color: var(--text-secondary); }
+    .connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 6px rgba(76, 175, 125, 0.4);
+    }
+    .connection-btn .fa-chevron-down {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-left: 4px;
+      transition: color 0.15s;
+    }
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .titlebar-right button {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 13px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .titlebar-right button:hover {
+      background: var(--elevated);
+      color: var(--text-primary);
+    }
+
+    /* ========================================
+       Connection Dropdown
+       ======================================== */
+    .conn-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      width: 320px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      padding: 8px;
+      z-index: 50;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(-4px);
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .conn-dropdown.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+    .conn-dropdown-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 4px 10px 8px;
+    }
+    .conn-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .conn-dropdown-item:hover { background: var(--elevated); }
+    .conn-dropdown-item.current { background: var(--accent-dim); }
+    .conn-dropdown-item .conn-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+    }
+    .conn-dropdown-item .conn-host {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .conn-dropdown-item .conn-info {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      flex: 1;
+    }
+    .conn-dropdown-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0;
+    }
+    .conn-dropdown-item.new-item {
+      color: var(--accent);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .conn-dropdown-item.new-item i { width: 16px; text-align: center; font-size: 11px; }
+    .saved-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .saved-dot.online { background: var(--success); box-shadow: 0 0 4px rgba(76, 175, 125, 0.3); }
+
+    /* ========================================
+       Workspace (Split Pane)
+       ======================================== */
+    .workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ========================================
+       Panel Base
+       ======================================== */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 200px;
+    }
+    .panel--terminal { flex: 0 0 58%; background: var(--panel); }
+    .panel--sftp { flex: 1; background: var(--panel); }
+    .panel-header {
+      height: var(--panel-header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px;
+      flex-shrink: 0;
+    }
+    .panel-tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 100%;
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      height: 28px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: background 0.12s, color 0.12s;
+    }
+    .tab:hover { background: var(--elevated); color: var(--text-primary); }
+    .tab.active { background: var(--panel); color: var(--text-primary); }
+    .tab i { font-size: 11px; }
+    .tab-add { color: var(--text-muted); }
+    .tab-add:hover { color: var(--accent); background: transparent; }
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+    .panel-actions button {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .panel-actions button:hover {
+      background: var(--elevated);
+      color: var(--text-primary);
+    }
+
+    /* ========================================
+       Terminal
+       ======================================== */
+    .terminal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+    .terminal-body::-webkit-scrollbar { width: 6px; }
+    .terminal-body::-webkit-scrollbar-track { background: transparent; }
+    .terminal-body::-webkit-scrollbar-thumb { background: var(--active); border-radius: 3px; }
+    .terminal-body::-webkit-scrollbar-thumb:hover { background: var(--hover); }
+
+    .term-line { white-space: pre-wrap; word-break: break-all; min-height: 1.7em; }
+    .term-prompt { color: var(--accent); }
+    .term-path { color: var(--info); }
+    .term-command { color: var(--text-primary); }
+    .term-output { color: var(--text-secondary); }
+    .term-dir { color: var(--info); }
+    .term-file { color: var(--text-primary); }
+    .term-perm-dir { color: var(--success); }
+    .term-perm-file { color: var(--text-muted); }
+    .term-header { color: var(--accent); font-weight: 500; }
+    .term-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 17px;
+      background: var(--text-primary);
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ========================================
+       Split Divider (Signature Element)
+       ======================================== */
+    .split-divider {
+      width: 1px;
+      background: var(--border);
+      cursor: col-resize;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    /* Invisible wider hit area for easier grabbing */
+    .split-divider::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -5px;
+      right: -5px;
+      bottom: 0;
+    }
+    /* Visible grip indicator on hover */
+    .split-divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 3px;
+      height: 28px;
+      border-radius: 2px;
+      background: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .split-divider:hover {
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(232, 168, 76, 0.3);
+    }
+    .split-divider:hover::after { opacity: 0.7; }
+    .split-divider.dragging {
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(232, 168, 76, 0.4);
+    }
+    .split-divider.dragging::after { opacity: 1; }
+
+    /* ========================================
+       SFTP Path Bar
+       ======================================== */
+    .sftp-path {
+      padding: 5px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .path-segment {
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 3px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .path-segment:hover { color: var(--accent); background: var(--accent-dim); }
+    .path-segment:last-child { color: var(--text-primary); }
+    .path-sep { color: var(--text-muted); font-size: 9px; margin: 0 1px; }
+
+    /* ========================================
+       SFTP File Table
+       ======================================== */
+    .sftp-content { flex: 1; overflow-y: auto; }
+    .sftp-content::-webkit-scrollbar { width: 6px; }
+    .sftp-content::-webkit-scrollbar-track { background: transparent; }
+    .sftp-content::-webkit-scrollbar-thumb { background: var(--active); border-radius: 3px; }
+    .sftp-content::-webkit-scrollbar-thumb:hover { background: var(--hover); }
+
+    .sftp-table { width: 100%; font-size: 12px; }
+    .sftp-table thead { position: sticky; top: 0; z-index: 2; }
+    .sftp-table th {
+      padding: 7px 16px;
+      text-align: left;
+      font-weight: 500;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: color 0.12s;
+      white-space: nowrap;
+    }
+    .sftp-table th:hover { color: var(--text-secondary); }
+    .sftp-table th .sort-icon { font-size: 9px; margin-left: 3px; opacity: 0.5; }
+    .sftp-table td { padding: 0 16px; height: 34px; vertical-align: middle; border-bottom: 1px solid var(--divider); }
+    .sftp-table td:nth-child(2) { text-align: right; }
+    .sftp-table th:nth-child(2) { text-align: right; }
+    .sftp-table td:nth-child(4) { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+    .file-row { cursor: pointer; transition: background 0.08s; }
+    .file-row:hover td { background: var(--elevated); }
+    .file-row.selected td { background: var(--accent-dim); }
+    .file-row.selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+
+    .file-icon { margin-right: 8px; font-size: 13px; width: 16px; display: inline-block; text-align: center; }
+    .file-icon.dir { color: var(--accent); }
+    .file-icon.file { color: var(--text-muted); }
+    .file-name { font-family: var(--font-mono); font-size: 12px; }
+    .file-name.dir { color: var(--text-primary); font-weight: 500; }
+    .file-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+    /* ========================================
+       Status Bar
+       ======================================== */
+    .statusbar {
+      height: var(--statusbar-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .statusbar-left, .statusbar-right { display: flex; align-items: center; gap: 14px; }
+    .status-connected { display: flex; align-items: center; gap: 5px; color: var(--success); font-weight: 500; }
+    .status-connected i { font-size: 6px; }
+    .status-sep { color: var(--border); }
+    .status-stat { font-family: var(--font-mono); font-size: 10px; letter-spacing: -0.2px; }
+
+    /* ========================================
+       Connection Modal
+       ======================================== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 460px;
+      max-height: 88vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+      transform: translateY(8px) scale(0.98);
+      transition: transform 0.15s ease;
+    }
+    .modal-overlay.active .modal { transform: translateY(0) scale(1); }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+    }
+    .modal-header h2 { font-size: 16px; font-weight: 600; }
+    .modal-close {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .modal-close:hover { background: var(--elevated); color: var(--text-primary); }
+
+    .modal-body { padding: 20px 24px; }
+
+    /* Form elements */
+    .form-row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .form-group { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .form-group.narrow { flex: 0 0 88px; }
+    .form-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-input {
+      height: 36px;
+      padding: 0 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus { border-color: var(--accent); }
+    .form-input::placeholder { color: var(--text-muted); }
+
+    /* Auth method toggle */
+    .auth-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .auth-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+    .auth-option {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-align: center;
+      transition: all 0.12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .auth-option:hover { border-color: var(--text-muted); }
+    .auth-option.active {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .form-check input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+    /* Saved connections in modal */
+    .saved-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .saved-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 6px;
+    }
+    .saved-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .saved-item:hover { background: var(--elevated); }
+    .saved-item-name { font-size: 13px; font-weight: 500; flex: 1; }
+    .saved-item-host {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 4px 24px 20px;
+    }
+    .btn {
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.12s;
+    }
+    .btn-ghost { color: var(--text-secondary); }
+    .btn-ghost:hover { background: var(--elevated); color: var(--text-primary); }
+    .btn-primary { background: var(--accent); color: var(--frame); font-weight: 600; }
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* ========================================
+       Local Mode Indicators
+       ======================================== */
+    .local-mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.3px;
+    }
+    .conn-dropdown-item.local-item {
+      border: 1px dashed var(--border);
+      margin-bottom: 6px;
+    }
+    .conn-dropdown-item.local-item:hover { background: var(--accent-dim); }
+    .conn-dropdown-item.local-item i { color: var(--accent); width: 16px; text-align: center; }
+    .conn-dropdown-item.local-item .conn-name { color: var(--accent); }
+    .view-local, .view-remote { display: none; }
+    [data-mode="local"] .view-local { display: flex; }
+    [data-mode="local"] .view-remote { display: none; }
+    [data-mode="remote"] .view-local { display: none; }
+    [data-mode="remote"] .view-remote { display: flex; }
+
+    /* ========================================
+       Accessibility
+       ======================================== */
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- ============ Title Bar ============ -->
+    <header class="titlebar">
+      <div class="titlebar-left">
+        <span class="app-logo"><i class="fas fa-terminal"></i></span>
+        <span class="app-name">ShellForge</span>
+      </div>
+      <div class="titlebar-center">
+        <button class="connection-btn" id="connBtn" aria-label="当前连接">
+          <span class="connection-dot"></span>
+          <span>deploy@prod-server</span>
+          <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="conn-dropdown" id="connDropdown">
+          <div class="conn-dropdown-item local-item" id="localShellBtn">
+            <i class="fas fa-laptop"></i>
+            <div class="conn-info">
+              <span class="conn-name"><i class="fas fa-laptop"></i> 本地终端</span>
+              <span class="conn-host">PowerShell / CMD</span>
+            </div>
+          </div>
+          <div class="conn-dropdown-sep"></div>
+          <div class="conn-dropdown-label">已保存的连接</div>
+          <div class="conn-dropdown-item current">
+            <span class="saved-dot online"></span>
+            <div class="conn-info">
+              <span class="conn-name">production-server</span>
+              <span class="conn-host">deploy@192.168.1.100:22</span>
+            </div>
+          </div>
+          <div class="conn-dropdown-item">
+            <span class="saved-dot"></span>
+            <div class="conn-info">
+              <span class="conn-name">staging-server</span>
+              <span class="conn-host">deploy@192.168.1.101:22</span>
+            </div>
+          </div>
+          <div class="conn-dropdown-item">
+            <span class="saved-dot"></span>
+            <div class="conn-info">
+              <span class="conn-name">dev-database</span>
+              <span class="conn-host">root@10.0.1.50:22</span>
+            </div>
+          </div>
+          <div class="conn-dropdown-sep"></div>
+          <div class="conn-dropdown-item new-item" id="dropdownNewConn">
+            <i class="fas fa-plus"></i>
+            <span>新建连接</span>
+          </div>
+        </div>
+      </div>
+      <div class="titlebar-right">
+        <button title="新建连接" aria-label="新建连接" id="newConnBtn">
+          <i class="fas fa-plus"></i>
+        </button>
+        <button title="设置" aria-label="设置">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- ============ Workspace ============ -->
+    <main class="workspace" id="workspace" data-mode="remote">
+      <!-- ========== Remote Terminal (SSH) ========== -->
+      <div class="view-remote panel panel--terminal" id="terminalPanel" aria-label="终端">
+        <div class="panel-header">
+          <div class="panel-tabs" role="tablist">
+            <button class="tab active" role="tab" aria-selected="true"><i class="fas fa-terminal"></i> bash</button>
+            <button class="tab" role="tab" aria-selected="false"><i class="fas fa-chart-bar"></i> 监控</button>
+            <button class="tab tab-add" role="tab" aria-label="新建终端"><i class="fas fa-plus"></i></button>
+          </div>
+          <div class="panel-actions">
+            <button title="复制" aria-label="复制"><i class="fas fa-copy"></i></button>
+            <button title="清屏" aria-label="清屏"><i class="fas fa-eraser"></i></button>
+          </div>
+        </div>
+        <div class="terminal-body" id="terminalBody">
+          <div class="term-line"><span class="term-prompt">deploy@prod-server</span>:<span class="term-path">~</span>$ <span class="term-command">cd /home/deploy/app</span></div>
+          <div class="term-line"><span class="term-prompt">deploy@prod-server</span>:<span class="term-path">~/app</span>$ <span class="term-command">ls -la</span></div>
+          <div class="term-line"><span class="term-output">total 48</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  6 deploy deploy 4096 Jun 28 10:23 <span class="term-dir">.</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  3 root   root   4096 May 15 09:00 <span class="term-dir">..</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  4 deploy deploy 4096 Jun 25 14:12 <span class="term-dir">src</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  2 deploy deploy 4096 Jun 20 08:45 <span class="term-dir">config</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  6 deploy deploy 4096 Jun 28 10:24 <span class="term-dir">node_modules</span></div>
+          <div class="term-line"><span class="term-perm-dir">drwxr-xr-x</span>  8 deploy deploy 4096 Jun 28 09:15 <span class="term-dir">.git</span></div>
+          <div class="term-line"><span class="term-perm-file">-rw-r--r--</span>  1 deploy deploy 1205 Jun 28 10:23 package.json</div>
+          <div class="term-line"><span class="term-perm-file">-rw-r--r--</span>  1 deploy deploy  892 Jun 18 16:30 Dockerfile</div>
+          <div class="term-line"><span class="term-perm-file">-rw-r--r--</span>  1 deploy deploy 2140 Jun 15 11:22 README.md</div>
+          <div class="term-line"><span class="term-perm-file">-rw-r--r--</span>  1 deploy deploy  545 Jun 10 13:40 tsconfig.json</div>
+          <div class="term-line"><span class="term-perm-file">-rw-------</span>  1 deploy deploy  128 May 28 17:00 .env</div>
+          <div class="term-line"><span class="term-perm-file">-rw-r--r--</span>  1 deploy deploy   67 May 15 09:05 .dockerignore</div>
+          <div class="term-line"></div>
+          <div class="term-line"><span class="term-prompt">deploy@prod-server</span>:<span class="term-path">~/app</span>$ <span class="term-cursor"></span></div>
+        </div>
+      </div>
+
+      <!-- ========== Local Terminal ========== -->
+      <div class="view-local panel panel--terminal" aria-label="本地终端">
+        <div class="panel-header">
+          <div class="panel-tabs" role="tablist">
+            <button class="tab active" role="tab" aria-selected="true"><i class="fas fa-terminal"></i> PowerShell</button>
+            <button class="tab" role="tab" aria-selected="false"><i class="fas fa-terminal"></i> CMD</button>
+            <button class="tab tab-add" role="tab" aria-label="新建终端"><i class="fas fa-plus"></i></button>
+          </div>
+          <div class="panel-actions">
+            <button title="复制" aria-label="复制"><i class="fas fa-copy"></i></button>
+            <button title="清屏" aria-label="清屏"><i class="fas fa-eraser"></i></button>
+          </div>
+        </div>
+        <div class="terminal-body">
+          <div class="term-line"><span class="term-header">Windows PowerShell</span></div>
+          <div class="term-line"><span class="term-output">PS C:\Users\deploy&gt; <span class="term-command">cd C:\Projects\my-app</span></span></div>
+          <div class="term-line"><span class="term-output">PS C:\Projects\my-app&gt; <span class="term-command">dir</span></span></div>
+          <div class="term-line"></div>
+          <div class="term-line"><span class="term-output">    Directory: C:\Projects\my-app</span></div>
+          <div class="term-line"></div>
+          <div class="term-line"><span class="term-output">Mode                 LastWriteTime         Length Name</span></div>
+          <div class="term-line"><span class="term-output">----                 -------------         ------ ----</span></div>
+          <div class="term-line"><span class="term-perm-dir">d-----</span>       2026/6/25    14:12                <span class="term-dir">src</span></div>
+          <div class="term-line"><span class="term-perm-dir">d-----</span>       2026/6/20    08:45                <span class="term-dir">config</span></div>
+          <div class="term-line"><span class="term-perm-dir">d-----</span>       2026/6/28    10:24                <span class="term-dir">node_modules</span></div>
+          <div class="term-line"><span class="term-perm-file">-a----</span>       2026/6/28    10:23           1205 package.json</div>
+          <div class="term-line"><span class="term-perm-file">-a----</span>       2026/6/15    11:22           2140 README.md</div>
+          <div class="term-line"><span class="term-perm-file">-a----</span>       2026/6/10    13:40            545 tsconfig.json</div>
+          <div class="term-line"></div>
+          <div class="term-line"><span class="term-output">PS C:\Projects\my-app&gt; <span class="term-command">git status</span></span></div>
+          <div class="term-line"><span class="term-output">On branch main</span></div>
+          <div class="term-line"><span class="term-output">Changes not staged for commit:</span></div>
+          <div class="term-line"><span class="term-output">  modified:   src/index.ts</span></div>
+          <div class="term-line"><span class="term-output">  modified:   package.json</span></div>
+          <div class="term-line"></div>
+          <div class="term-line"><span class="term-output">PS C:\Projects\my-app&gt; <span class="term-cursor"></span></span></div>
+        </div>
+      </div>
+
+      <!-- Split Divider -->
+      <div class="split-divider" id="splitDivider" role="separator" aria-label="拖拽调整面板大小"></div>
+
+      <!-- ========== Remote File Browser (SFTP) ========== -->
+      <div class="view-remote panel panel--sftp" id="sftpPanel" aria-label="文件管理器">
+        <div class="panel-header">
+          <div class="panel-tabs" role="tablist">
+            <button class="tab active" role="tab" aria-selected="true"><i class="fas fa-folder-open"></i> 文件</button>
+          </div>
+          <div class="panel-actions">
+            <button title="上传" aria-label="上传文件"><i class="fas fa-cloud-upload-alt"></i></button>
+            <button title="下载" aria-label="下载选中文件"><i class="fas fa-cloud-download-alt"></i></button>
+            <button title="新建文件夹" aria-label="新建文件夹"><i class="fas fa-folder-plus"></i></button>
+            <button title="删除" aria-label="删除选中文件"><i class="fas fa-trash-alt"></i></button>
+            <button title="刷新" aria-label="刷新文件列表"><i class="fas fa-sync-alt"></i></button>
+          </div>
+        </div>
+        <nav class="sftp-path" aria-label="当前路径">
+          <span class="path-segment">/</span>
+          <span class="path-sep"><i class="fas fa-chevron-right"></i></span>
+          <span class="path-segment">home</span>
+          <span class="path-sep"><i class="fas fa-chevron-right"></i></span>
+          <span class="path-segment">deploy</span>
+          <span class="path-sep"><i class="fas fa-chevron-right"></i></span>
+          <span class="path-segment">app</span>
+        </nav>
+        <div class="sftp-content">
+          <table class="sftp-table" role="grid">
+            <thead>
+              <tr>
+                <th>名称 <i class="fas fa-sort sort-icon"></i></th>
+                <th>大小 <i class="fas fa-sort sort-icon"></i></th>
+                <th>修改时间 <i class="fas fa-sort sort-icon"></i></th>
+                <th>权限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="file-row" data-type="parent">
+                <td><span class="file-icon dir"><i class="fas fa-level-up-alt"></i></span><span class="file-name dir" style="color:var(--text-secondary)">..</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">—</td>
+                <td>—</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">src</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">Jun 25 14:12</td>
+                <td>drwxr-xr-x</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">config</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">Jun 20 08:45</td>
+                <td>drwxr-xr-x</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">node_modules</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">Jun 28 10:24</td>
+                <td>drwxr-xr-x</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">.git</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">Jun 28 09:15</td>
+                <td>drwxr-xr-x</td>
+              </tr>
+              <tr class="file-row selected" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-code"></i></span><span class="file-name">package.json</span></td>
+                <td class="file-meta">1.2 KB</td>
+                <td class="file-meta">Jun 28 10:23</td>
+                <td>-rw-r--r--</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-code"></i></span><span class="file-name">Dockerfile</span></td>
+                <td class="file-meta">892 B</td>
+                <td class="file-meta">Jun 18 16:30</td>
+                <td>-rw-r--r--</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-alt"></i></span><span class="file-name">README.md</span></td>
+                <td class="file-meta">2.1 KB</td>
+                <td class="file-meta">Jun 15 11:22</td>
+                <td>-rw-r--r--</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-code"></i></span><span class="file-name">tsconfig.json</span></td>
+                <td class="file-meta">545 B</td>
+                <td class="file-meta">Jun 10 13:40</td>
+                <td>-rw-r--r--</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-lock"></i></span><span class="file-name">.env</span></td>
+                <td class="file-meta">128 B</td>
+                <td class="file-meta">May 28 17:00</td>
+                <td>-rw-------</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-alt"></i></span><span class="file-name">.dockerignore</span></td>
+                <td class="file-meta">67 B</td>
+                <td class="file-meta">May 15 09:05</td>
+                <td>-rw-r--r--</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========== Local File Browser ========== -->
+      <div class="view-local panel panel--sftp" aria-label="本地文件管理器">
+        <div class="panel-header">
+          <div class="panel-tabs" role="tablist">
+            <button class="tab active" role="tab" aria-selected="true"><i class="fas fa-hdd"></i> 本地磁盘</button>
+          </div>
+          <div class="panel-actions">
+            <button title="新建文件夹" aria-label="新建文件夹"><i class="fas fa-folder-plus"></i></button>
+            <button title="删除" aria-label="删除选中文件"><i class="fas fa-trash-alt"></i></button>
+            <button title="刷新" aria-label="刷新"><i class="fas fa-sync-alt"></i></button>
+          </div>
+        </div>
+        <nav class="sftp-path" aria-label="当前路径">
+          <span class="path-segment">C:</span>
+          <span class="path-sep"><i class="fas fa-chevron-right"></i></span>
+          <span class="path-segment">Projects</span>
+          <span class="path-sep"><i class="fas fa-chevron-right"></i></span>
+          <span class="path-segment">my-app</span>
+        </nav>
+        <div class="sftp-content">
+          <table class="sftp-table" role="grid">
+            <thead>
+              <tr>
+                <th>名称 <i class="fas fa-sort sort-icon"></i></th>
+                <th>大小 <i class="fas fa-sort sort-icon"></i></th>
+                <th>修改时间 <i class="fas fa-sort sort-icon"></i></th>
+                <th>类型</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="file-row" data-type="parent">
+                <td><span class="file-icon dir"><i class="fas fa-level-up-alt"></i></span><span class="file-name dir" style="color:var(--text-secondary)">..</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">—</td>
+                <td>—</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">src</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">2026/6/25 14:12</td>
+                <td>文件夹</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">config</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">2026/6/20 08:45</td>
+                <td>文件夹</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">node_modules</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">2026/6/28 10:24</td>
+                <td>文件夹</td>
+              </tr>
+              <tr class="file-row" data-type="dir">
+                <td><span class="file-icon dir"><i class="fas fa-folder"></i></span><span class="file-name dir">.git</span></td>
+                <td class="file-meta">—</td>
+                <td class="file-meta">2026/6/28 09:15</td>
+                <td>文件夹</td>
+              </tr>
+              <tr class="file-row selected" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-code"></i></span><span class="file-name">package.json</span></td>
+                <td class="file-meta">1.2 KB</td>
+                <td class="file-meta">2026/6/28 10:23</td>
+                <td>JSON 文件</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-alt"></i></span><span class="file-name">README.md</span></td>
+                <td class="file-meta">2.1 KB</td>
+                <td class="file-meta">2026/6/15 11:22</td>
+                <td>Markdown</td>
+              </tr>
+              <tr class="file-row" data-type="file">
+                <td><span class="file-icon file"><i class="fas fa-file-code"></i></span><span class="file-name">tsconfig.json</span></td>
+                <td class="file-meta">545 B</td>
+                <td class="file-meta">2026/6/10 13:40</td>
+                <td>JSON 文件</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============ Status Bar (Remote) ============ -->
+    <footer class="statusbar view-remote">
+      <div class="statusbar-left">
+        <span class="status-connected"><i class="fas fa-circle"></i> 已连接</span>
+        <span class="status-sep">|</span>
+        <span class="status-stat">SSH-2.0 / SFTP</span>
+      </div>
+      <div class="statusbar-right">
+        <span class="status-stat">延迟: 32ms</span>
+        <span class="status-sep">|</span>
+        <span class="status-stat">已连接: 4h 23m</span>
+        <span class="status-sep">|</span>
+        <span class="status-stat">192.168.1.100</span>
+      </div>
+    </footer>
+
+    <!-- ============ Status Bar (Local) ============ -->
+    <footer class="statusbar view-local">
+      <div class="statusbar-left">
+        <span class="local-mode-badge"><i class="fas fa-laptop"></i> 本地</span>
+        <span class="status-sep">|</span>
+        <span class="status-stat">PowerShell 7.4</span>
+      </div>
+      <div class="statusbar-right">
+        <span class="status-stat">DESKTOP-7K2N</span>
+        <span class="status-sep">|</span>
+        <span class="status-stat">Windows 11</span>
+      </div>
+    </footer>
+
+    <!-- ============ Connection Modal ============ -->
+    <div class="modal-overlay" id="connModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>新建连接</h2>
+          <button class="modal-close" id="modalClose" aria-label="关闭"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="label">连接名称</label>
+              <input class="form-input" type="text" id="label" placeholder="例如：生产服务器">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="host">主机地址</label>
+              <input class="form-input" type="text" id="host" placeholder="192.168.1.100">
+            </div>
+            <div class="form-group narrow">
+              <label class="form-label" for="port">端口</label>
+              <input class="form-input" type="text" id="port" placeholder="22" value="22">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="username">用户名</label>
+              <input class="form-input" type="text" id="username" placeholder="deploy">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="authField">密码 / 密钥</label>
+              <input class="form-input" type="password" id="authField" placeholder="输入密码">
+            </div>
+          </div>
+          <div class="auth-label">认证方式</div>
+          <div class="auth-toggle">
+            <button class="auth-option active" data-method="password"><i class="fas fa-key"></i> 密码</button>
+            <button class="auth-option" data-method="key"><i class="fas fa-file-key"></i> 私钥文件</button>
+            <button class="auth-option" data-method="agent"><i class="fas fa-fingerprint"></i> SSH Agent</button>
+          </div>
+          <label class="form-check"><input type="checkbox" checked> 保存此连接</label>
+
+          <div class="saved-section">
+            <div class="saved-title">快速连接</div>
+            <div class="saved-item">
+              <span class="saved-dot"></span>
+              <span class="saved-item-name">staging-server</span>
+              <span class="saved-item-host">deploy@192.168.1.101</span>
+            </div>
+            <div class="saved-item">
+              <span class="saved-dot"></span>
+              <span class="saved-item-name">dev-database</span>
+              <span class="saved-item-host">root@10.0.1.50</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="modalCancel">取消</button>
+          <button class="btn btn-primary" id="modalConnect">连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ========================================
+       Interactive Behaviors
+       ======================================== */
+
+    /** Toggle connection dropdown */
+    const connBtn = document.getElementById('connBtn');
+    const connDropdown = document.getElementById('connDropdown');
+    let dropdownOpen = false;
+
+    connBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownOpen = !dropdownOpen;
+      connDropdown.classList.toggle('active', dropdownOpen);
+    });
+
+    document.addEventListener('click', () => {
+      dropdownOpen = false;
+      connDropdown.classList.remove('active');
+    });
+    connDropdown.addEventListener('click', (e) => e.stopPropagation());
+
+    /** Open connection modal */
+    const connModal = document.getElementById('connModal');
+    const newConnBtn = document.getElementById('newConnBtn');
+    const dropdownNewConn = document.getElementById('dropdownNewConn');
+    const modalClose = document.getElementById('modalClose');
+    const modalCancel = document.getElementById('modalCancel');
+
+    function openModal() {
+      dropdownOpen = false;
+      connDropdown.classList.remove('active');
+      connModal.classList.add('active');
+    }
+    function closeModal() { connModal.classList.remove('active'); }
+
+    newConnBtn.addEventListener('click', openModal);
+    dropdownNewConn.addEventListener('click', openModal);
+    modalClose.addEventListener('click', closeModal);
+    modalCancel.addEventListener('click', closeModal);
+    connModal.addEventListener('click', (e) => { if (e.target === connModal) closeModal(); });
+
+    /** Auth method toggle */
+    document.querySelectorAll('.auth-option').forEach((opt) => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.auth-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        const method = opt.dataset.method;
+        const authField = document.getElementById('authField');
+        if (method === 'password') {
+          authField.type = 'password';
+          authField.placeholder = '输入密码';
+        } else if (method === 'key') {
+          authField.type = 'text';
+          authField.placeholder = '~/.ssh/id_rsa';
+        } else {
+          authField.type = 'text';
+          authField.placeholder = '使用 SSH Agent';
+          authField.disabled = true;
+        }
+        if (method !== 'agent') authField.disabled = false;
+      });
+    });
+
+    /** File row selection */
+    document.querySelectorAll('.file-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        document.querySelectorAll('.file-row.selected').forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+      });
+    });
+
+    /** Split pane drag-to-resize */
+    const splitDivider = document.getElementById('splitDivider');
+    const workspace = document.getElementById('workspace');
+    const terminalPanel = document.getElementById('terminalPanel');
+    const sftpPanel = document.getElementById('sftpPanel');
+    let isDragging = false;
+
+    splitDivider.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      splitDivider.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const rect = workspace.getBoundingClientRect();
+      const offset = e.clientX - rect.left;
+      const total = rect.width;
+      const pct = (offset / total) * 100;
+      const clamped = Math.max(25, Math.min(75, pct));
+      terminalPanel.style.flex = `0 0 ${clamped}%`;
+      sftpPanel.style.flex = '1';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        splitDivider.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+
+    /** Switch between local / remote mode */
+    const workspaceEl = document.getElementById('workspace');
+    const localShellBtn = document.getElementById('localShellBtn');
+    const connBtnLabel = connBtn.querySelector('span:nth-child(2)');
+    const connBtnDot = connBtn.querySelector('.connection-dot');
+
+    function switchMode(mode) {
+      workspaceEl.dataset.mode = mode;
+      if (mode === 'local') {
+        connBtnLabel.textContent = '本地终端';
+        connBtnDot.style.background = 'var(--accent)';
+        connBtnDot.style.boxShadow = '0 0 6px rgba(232, 168, 76, 0.4)';
+      } else {
+        connBtnLabel.textContent = 'deploy@prod-server';
+        connBtnDot.style.background = '';
+        connBtnDot.style.boxShadow = '';
+      }
+    }
+
+    localShellBtn.addEventListener('click', () => {
+      dropdownOpen = false;
+      connDropdown.classList.remove('active');
+      switchMode('local');
+    });
+
+    /** Click remote connections to switch back */
+    document.querySelectorAll('.conn-dropdown-item:not(.local-item):not(.new-item)').forEach((item) => {
+      item.addEventListener('click', () => {
+        dropdownOpen = false;
+        connDropdown.classList.remove('active');
+        document.querySelectorAll('.conn-dropdown-item.current').forEach(c => c.classList.remove('current'));
+        item.classList.add('current');
+        const name = item.querySelector('.conn-host')?.textContent || item.querySelector('.conn-name').textContent;
+        connBtnLabel.textContent = name;
+        switchMode('remote');
+      });
+    });
+
+    /** Terminal tabs */
+    document.querySelectorAll('.panel-tabs .tab:not(.tab-add)').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tab.parentElement.querySelectorAll('.tab').forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-selected', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+      });
+    });
+  </script>
+</body>
+</html>

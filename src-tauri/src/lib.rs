@@ -13,6 +13,7 @@ use local_term::LocalManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(debug_assertions)]
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .filter_module("russh", log::LevelFilter::Warn)
     .init();

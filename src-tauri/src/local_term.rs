@@ -9,6 +9,11 @@ use encoding_rs::Encoding;
 use portable_pty::{CommandBuilder, native_pty_system, PtySize};
 use crate::models::{LocalFileInfo, ShellInfo};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 struct LocalShell {
     child: Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
     writer: Mutex<Box<dyn Write + Send>>,
@@ -201,6 +206,7 @@ fn detect_shells_inner() -> Vec<ShellInfo> {
     }
 
     if let Ok(output) = std::process::Command::new("wsl.exe")
+        .creation_flags(CREATE_NO_WINDOW)
         .args(&["--list", "--quiet"])
         .output()
     {
@@ -355,6 +361,7 @@ pub async fn stop_local_shell(
         #[cfg(windows)]
         if let Some(pid) = shell.pid {
             let _ = std::process::Command::new("taskkill")
+                .creation_flags(CREATE_NO_WINDOW)
                 .args(&["/PID", &pid.to_string(), "/F"])
                 .spawn()
                 .and_then(|mut c| c.wait());

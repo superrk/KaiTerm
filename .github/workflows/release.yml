@@ -64,7 +64,7 @@ jobs:
           save-if: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/') }}
 
       - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v2
+        uses: tauri-apps/tauri-action@v1
         id: tauri_build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -49,6 +49,7 @@ export const useTerminalStore = defineStore("terminal", () => {
       theme: t,
       allowTransparency: false,
       disableStdin: false,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();

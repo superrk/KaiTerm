@@ -294,7 +294,12 @@ impl SessionManager {
         } else if use_agent {
             use russh::keys::agent::client::AgentClient;
 
+            #[cfg(windows)]
             let mut agent = AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent")
+                .await
+                .map_err(|e| format!("连接 SSH Agent 失败: {}", e))?;
+            #[cfg(not(windows))]
+            let mut agent = AgentClient::connect_env()
                 .await
                 .map_err(|e| format!("连接 SSH Agent 失败: {}", e))?;
             let identities = agent
@@ -503,7 +508,12 @@ impl SessionManager {
             }
         } else if use_agent {
             use russh::keys::agent::client::AgentClient;
+            #[cfg(windows)]
             let mut agent = AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent")
+                .await
+                .map_err(|e| format!("连接 SSH Agent 失败: {}", e))?;
+            #[cfg(not(windows))]
+            let mut agent = AgentClient::connect_env()
                 .await
                 .map_err(|e| format!("连接 SSH Agent 失败: {}", e))?;
             let identities = agent.request_identities().await
